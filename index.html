@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0B0F17" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Gym Buddy — Workout Tracker</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for Weekly, Monthly & Exercise Progress Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Canvas Confetti for PR Celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            bgDark: '#0B0F17',
+            cardDark: '#151C28',
+            elevatedDark: '#1E293B',
+            emerald: '#10B981',
+            indigo: '#6366F1'
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; user-select: none; }
+    input, textarea, select { user-select: text; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overscroll-behavior-y: none;
+    }
+    /* Every button has 0.95 scale press animation */
+    .btn-anim {
+      transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+    }
+    .btn-anim:active {
+      transform: scale(0.94);
+    }
+    .pulse-plus:active {
+      transform: scale(1.2) rotate(90deg);
+    }
+    /* Hide scrollbars for clean mobile UI */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+
+<body class="bg-slate-100 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 min-h-screen flex justify-center">
+
+  <!-- Mobile App Frame -->
+  <div class="w-full max-w-md min-h-screen flex flex-col bg-slate-100 dark:bg-[#0B0F17] relative pb-24 shadow-2xl">
+
+    <!-- Top App Bar -->
+    <header class="sticky top-0 z-30 bg-white/90 dark:bg-[#151C28]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-xl bg-emerald/20 flex items-center justify-center text-emerald font-black text-lg">
+          💪
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base leading-tight tracking-tight">GYM BUDDY</h1>
+          <p id="headerSubtitle" class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">Offline Workout Tracker</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Unit Toggle (KG / LB) -->
+        <button onclick="toggleWeightUnit()" id="unitToggleBtn" class="btn-anim px-3 py-1.5 rounded-lg bg-emerald/15 text-emerald font-extrabold text-xs">
+          KG
+        </button>
+        <!-- Dark / Light Mode Toggle -->
+        <button onclick="toggleTheme()" class="btn-anim w-9 h-9 rounded-lg bg-slate-200 dark:bg-slate-800 flex items-center justify-center">
+          <i data-lucide="moon" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Floating Rest & Stopwatch Timer Bar -->
+    <div class="mx-3 mt-2 px-3 py-2 rounded-xl bg-white dark:bg-[#151C28] border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-2">
+        <button onclick="switchTimerMode()" id="timerModeBtn" class="btn-anim px-2.5 py-1 rounded-md bg-indigo/15 text-indigo font-extrabold text-[11px]">
+          REST
+        </button>
+        <span id="timerDisplay" class="font-black text-lg tabular-nums tracking-wider">01:30</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="toggleTimer()" id="timerPlayBtn" class="btn-anim px-3 py-1.5 rounded-lg bg-emerald text-white font-bold text-xs">
+          Start
+        </button>
+        <button onclick="adjustTimer(30)" class="btn-anim px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 font-bold text-xs">
+          +30s
+        </button>
+        <button onclick="resetTimer()" class="btn-anim px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-xs font-bold">
+          Reset
+        </button>
+        <button onclick="syncTimerToLastRow()" class="btn-anim px-2.5 py-1.5 rounded-lg bg-indigo text-white text-xs font-bold" title="Apply seconds to current set">
+          Sync
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 px-3 pt-3 overflow-y-auto no-scrollbar">
+
+      <!-- ==================== TAB 1: LOG WORKOUT SCREEN (CORE FEATURE) ==================== -->
+      <section id="tab-log" class="space-y-3">
+        <!-- Date Picker + Quick Compare -->
+        <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-400">DATE:</span>
+            <input type="date" id="workoutDateInput" onchange="onDateChange(this.value)" class="bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg font-bold text-xs outline-none" />
+          </div>
+          <button onclick="switchTab('compare')" class="btn-anim px-3 py-1.5 rounded-lg bg-indigo/15 text-indigo font-extrabold text-xs flex items-center gap-1">
+            <span>Compare Prev</span>
+          </button>
+        </div>
+
+        <!-- Workout Table Header: | Date | Exercise | Set | Rep | Wt | Time | + | -->
+        <div class="bg-slate-200/80 dark:bg-slate-800/90 px-2 py-2 rounded-xl grid grid-cols-12 gap-1 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 items-center text-center">
+          <div class="col-span-2 text-left pl-1">Date</div>
+          <div class="col-span-3 text-left">Exercise</div>
+          <div class="col-span-2">Set</div>
+          <div class="col-span-2">Rep</div>
+          <div class="col-span-1" id="tableWeightHeader">KG</div>
+          <div class="col-span-1">Sec</div>
+          <div class="col-span-1">Pic</div>
+        </div>
+
+        <!-- Dynamic Set Rows Container -->
+        <div id="setRowsContainer" class="space-y-2.5"></div>
+
+        <!-- Action Buttons: + Add Set (Duplicate Previous) & + Custom Exercise -->
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="duplicatePreviousSet()" class="btn-anim py-3 rounded-xl bg-indigo text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md">
+            <span>+ Add Set (Duplicate)</span>
+          </button>
+          <button onclick="openCustomExerciseModal()" class="btn-anim py-3 rounded-xl bg-slate-200 dark:bg-slate-800 font-extrabold text-xs flex items-center justify-center gap-1">
+            <span>+ Custom Exercise</span>
+          </button>
+        </div>
+
+        <!-- Session Summary & Save Workout Button -->
+        <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+          <div class="flex justify-between text-xs font-extrabold">
+            <span id="liveSetCount">Total Sets: 1</span>
+            <span id="liveVolumeCount" class="text-emerald">Session Volume: 0 kg</span>
+          </div>
+          <textarea id="workoutNotesInput" rows="2" placeholder="Workout notes (e.g., morning gym pump, felt strong on bench)..." class="w-full rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 text-xs outline-none"></textarea>
+          <button onclick="saveCurrentWorkout()" class="btn-anim w-full py-3.5 rounded-xl bg-emerald text-white font-black text-sm shadow-lg shadow-emerald/25 flex items-center justify-center gap-2">
+            <span>✅ Save Workout Session</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 2: REPORTS & PROGRESS ==================== -->
+      <section id="tab-reports" class="hidden space-y-3">
+        <!-- Sub-tabs: Weekly | Monthly | Progress | Per-Exercise -->
+        <div class="grid grid-cols-4 gap-1 bg-white dark:bg-[#151C28] p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-extrabold">
+          <button onclick="switchReportSubTab('weekly')" id="subtab-weekly" class="btn-anim py-2 rounded-lg bg-emerald text-white">Weekly</button>
+          <button onclick="switchReportSubTab('monthly')" id="subtab-monthly" class="btn-anim py-2 rounded-lg text-slate-400">Monthly</button>
+          <button onclick="switchReportSubTab('progress')" id="subtab-progress" class="btn-anim py-2 rounded-lg text-slate-400">Body</button>
+          <button onclick="switchReportSubTab('exercise')" id="subtab-exercise" class="btn-anim py-2 rounded-lg text-slate-400">Records</button>
+        </div>
+
+        <!-- 1. WEEKLY REPORT -->
+        <div id="report-weekly" class="space-y-3">
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p class="text-[11px] text-slate-400 font-bold">WEEKLY WORKOUTS</p>
+              <p id="wkWorkoutsVal" class="text-2xl font-black mt-0.5">0</p>
+            </div>
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p class="text-[11px] text-slate-400 font-bold">TOTAL VOLUME</p>
+              <p id="wkVolumeVal" class="text-2xl font-black text-emerald mt-0.5">0 kg</p>
+            </div>
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p class="text-[11px] text-slate-400 font-bold">SETS / REPS</p>
+              <p id="wkSetsRepsVal" class="text-xl font-black mt-0.5">0 / 0</p>
+            </div>
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p class="text-[11px] text-slate-400 font-bold">MOST TRAINED</p>
+              <p id="wkTopMuscleVal" class="text-xl font-black text-indigo mt-0.5">Chest</p>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-xs font-extrabold mb-2">Daily Volume Bar Chart (Last 7 Days)</h3>
+            <canvas id="weeklyBarChart" height="190"></canvas>
+          </div>
+
+          <!-- Recent History with Search & Delete + Undo -->
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-extrabold">Workout History Log</h3>
+              <input type="text" id="historySearch" oninput="renderReports()" placeholder="Search exercise..." class="bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-xs outline-none" />
+            </div>
+            <div id="workoutHistoryList" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- 2. MONTHLY REPORT (Calendar Heatmap + Trend Line Chart) -->
+        <div id="report-monthly" class="hidden space-y-3">
+          <div class="grid grid-cols-3 gap-2">
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl text-center">
+              <p class="text-[10px] text-slate-400 font-bold">ACTIVE DAYS</p>
+              <p id="moActiveDays" class="text-lg font-black text-emerald">0</p>
+            </div>
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl text-center">
+              <p class="text-[10px] text-slate-400 font-bold">BEST WEEK</p>
+              <p id="moBestWeek" class="text-lg font-black">0 kg</p>
+            </div>
+            <div class="bg-white dark:bg-[#151C28] p-3 rounded-2xl text-center">
+              <p class="text-[10px] text-slate-400 font-bold">STREAK</p>
+              <p id="moStreak" class="text-lg font-black text-amber-400">🔥 4</p>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-xs font-extrabold mb-2">28-Day Workout Calendar Heat-Map</h3>
+            <div id="calendarHeatmap" class="grid grid-cols-7 gap-1.5"></div>
+          </div>
+
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-xs font-extrabold mb-2">Monthly Volume Trend</h3>
+            <canvas id="monthlyLineChart" height="180"></canvas>
+          </div>
+        </div>
+
+        <!-- 3. BODY PROGRESS & BEFORE/AFTER PHOTO SLIDER -->
+        <div id="report-progress" class="hidden space-y-3">
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <h3 class="text-xs font-extrabold">Body Weight Goal</h3>
+              <p id="bodyGoalSubtitle" class="text-xs text-slate-400 mt-1">Current: 78 kg → Target: 75 kg</p>
+              <div class="flex gap-2 mt-2">
+                <input type="number" id="newBodyWeightInput" placeholder="Weight (kg)" class="w-28 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg text-xs font-bold" />
+                <button onclick="saveBodyWeightCheckin()" class="btn-anim px-3 py-1.5 rounded-lg bg-emerald text-white text-xs font-extrabold">Update</button>
+              </div>
+            </div>
+            <div class="w-16 h-16 rounded-full border-4 border-emerald flex items-center justify-center font-black text-sm text-emerald">
+              75%
+            </div>
+          </div>
+
+          <!-- Before / After Side-by-Side Slider -->
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+            <h3 class="text-xs font-extrabold">Progress Photos (Before / After Split Slider)</h3>
+            <div class="relative w-full h-52 rounded-xl overflow-hidden bg-slate-900">
+              <img id="afterPhotoImg" src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600" class="w-full h-52 object-cover" />
+              <div id="beforePhotoWrapper" style="width: 50%;" class="absolute top-0 left-0 bottom-0 overflow-hidden border-r-2 border-emerald">
+                <img id="beforePhotoImg" src="https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=600" class="w-96 max-w-none h-52 object-cover" />
+              </div>
+              <span class="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded font-bold">BEFORE</span>
+              <span class="absolute bottom-2 right-2 bg-emerald/90 text-white text-[10px] px-2 py-0.5 rounded font-bold">AFTER</span>
+            </div>
+            <input type="range" min="10" max="90" value="50" oninput="document.getElementById('beforePhotoWrapper').style.width = this.value + '%'" class="w-full accent-emerald" />
+          </div>
+        </div>
+
+        <!-- 4. PER-EXERCISE PERSONAL RECORDS -->
+        <div id="report-exercise" class="hidden space-y-3">
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <label class="text-[11px] font-bold text-slate-400">SELECT EXERCISE</label>
+            <select id="recordExerciseSelect" onchange="renderExerciseRecords()" class="w-full mt-1 bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl font-bold text-xs outline-none"></select>
+
+            <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+              <div class="bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl">
+                <p class="text-[10px] text-slate-400 font-bold">MAX WEIGHT</p>
+                <p id="prMaxWeight" class="text-base font-black text-emerald mt-0.5">0 kg</p>
+              </div>
+              <div class="bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl">
+                <p class="text-[10px] text-slate-400 font-bold">MAX REPS</p>
+                <p id="prMaxReps" class="text-base font-black text-indigo mt-0.5">0</p>
+              </div>
+              <div class="bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl">
+                <p class="text-[10px] text-slate-400 font-bold">MAX VOLUME</p>
+                <p id="prMaxVol" class="text-base font-black mt-0.5">0 kg</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-xs font-extrabold mb-2">Exercise Weight Progression Chart</h3>
+            <canvas id="exerciseLineChart" height="180"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 3: PREVIOUS VS CURRENT COMPARISON ==================== -->
+      <section id="tab-compare" class="hidden space-y-3">
+        <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <h2 class="text-sm font-black mb-1">Previous vs. Current Session</h2>
+          <p class="text-xs text-slate-400 mb-2">Green ▲ / Red ▼ indicators show exact % progress from your last session.</p>
+          <select id="compareExerciseSelect" onchange="renderComparison()" class="w-full bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl font-bold text-xs outline-none"></select>
+        </div>
+
+        <div id="prComparisonBanner" class="hidden bg-emerald/15 border border-emerald/40 p-3 rounded-2xl flex items-center gap-2 text-emerald font-extrabold text-xs">
+          <span>🏆 NEW PR! You lifted heavier than your previous session!</span>
+        </div>
+
+        <div id="comparisonCardsContainer" class="space-y-2.5"></div>
+      </section>
+
+      <!-- ==================== TAB 4: ROUTINES & EXERCISE LIBRARY ==================== -->
+      <section id="tab-routines" class="hidden space-y-3">
+        <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+          <h2 class="text-sm font-black">Workout Routines (1-Tap Load)</h2>
+          <div id="routinesListContainer" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+          <h2 class="text-sm font-black">Exercise Library (20+ Exercises)</h2>
+          <input type="text" id="librarySearchInput" oninput="renderLibrary()" placeholder="Filter by name or muscle group..." class="w-full bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl text-xs outline-none" />
+          <div id="libraryListContainer" class="space-y-2 max-h-96 overflow-y-auto no-scrollbar"></div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 5: PROFILE, WATER & EXPORT ==================== -->
+      <section id="tab-profile" class="hidden space-y-3">
+        <!-- Athlete Profile -->
+        <div class="bg-white dark:bg-[#151C28] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+          <h2 class="text-sm font-black">Athlete Profile & Goals</h2>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="text-[10px] text-slate-400 font-bold">NAME</label>
+              <input type="text" id="profName" class="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-lg font-bold mt-0.5" />
+            </div>
+            <div>
+              <label class="text-[10px] text-slate-400 font-bold">GOAL</label>
+              <select id="profGoal" class="w-full bg-slate-100 dark:bg-slate-800 p-2 rounded-lg font-bold mt-0.5">
+                <option>Build Muscle</option>
+                <option>Strength & PRs</option>
+                <option>Lose Fat</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="saveProfileSettings()" class="btn-anim w-full py-2.5 rounded-xl bg-emerald text-white font-extrabold text-xs">
+            Save Profile
+          </button>
+        </div>
+
+        <!-- Daily Water & Calorie Tracker -->
+        <div class="bg-white dark:bg-[#151C28] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+          <h2 class="text-sm font-black">Hydration Tracker 💧</h2>
+          <p id="waterReadout" class="text-lg font-black text-emerald">2,000 / 3,000 ml</p>
+          <div class="flex gap-2">
+            <button onclick="addWater(250)" class="btn-anim flex-1 py-2 rounded-xl bg-emerald/15 text-emerald font-extrabold text-xs">+250 ml</button>
+            <button onclick="addWater(500)" class="btn-anim flex-1 py-2 rounded-xl bg-emerald/15 text-emerald font-extrabold text-xs">+500 ml</button>
+          </div>
+        </div>
+
+        <!-- Export CSV & Backup -->
+        <div class="bg-white dark:bg-[#151C28] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+          <h2 class="text-sm font-black">Export & Backup</h2>
+          <button onclick="exportCSV()" class="btn-anim w-full py-3 rounded-xl bg-indigo text-white font-extrabold text-xs">
+            📊 Export Workout History as CSV
+          </button>
+          <button onclick="window.print()" class="btn-anim w-full py-3 rounded-xl bg-slate-200 dark:bg-slate-800 font-extrabold text-xs">
+            📄 Print / Save as PDF Report
+          </button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Undo Snackbar -->
+    <div id="undoSnackbar" class="hidden fixed bottom-20 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center justify-between z-40">
+      <span class="text-xs font-bold">Workout deleted</span>
+      <button onclick="undoDelete()" class="btn-anim px-3 py-1 rounded-lg bg-emerald text-white text-xs font-extrabold">UNDO</button>
+    </div>
+
+    <!-- Photo Attachment Modal (Camera / Gallery / Preview / Delete) -->
+    <div id="photoModal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-end sm:items-center justify-center p-4">
+      <div class="bg-white dark:bg-[#151C28] w-full max-w-sm rounded-2xl p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="font-extrabold text-sm">Set Form / Machine Photo</h3>
+          <button onclick="closePhotoModal()" class="text-xs font-bold text-slate-400">Close</button>
+        </div>
+
+        <img id="modalPhotoPreview" class="hidden w-full h-56 object-cover rounded-xl" />
+
+        <!-- Hidden file input supports mobile Camera & Photo Gallery -->
+        <input type="file" id="cameraFileInput" accept="image/*" capture="environment" onchange="handlePhotoSelected(event)" class="hidden" />
+        <input type="file" id="galleryFileInput" accept="image/*" onchange="handlePhotoSelected(event)" class="hidden" />
+
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="document.getElementById('cameraFileInput').click()" class="btn-anim py-3 rounded-xl bg-emerald text-white font-extrabold text-xs">
+            📷 Open Camera
+          </button>
+          <button onclick="document.getElementById('galleryFileInput').click()" class="btn-anim py-3 rounded-xl bg-indigo text-white font-extrabold text-xs">
+            🖼️ Choose Gallery
+          </button>
+        </div>
+
+        <button id="deletePhotoBtn" onclick="deleteRowPhoto()" class="hidden btn-anim w-full py-2.5 rounded-xl bg-red-500/20 text-red-400 font-extrabold text-xs">
+          🗑️ Remove Photo
+        </button>
+      </div>
+    </div>
+
+    <!-- Custom Exercise Modal -->
+    <div id="customExModal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-[#151C28] w-full max-w-sm rounded-2xl p-4 space-y-3">
+        <h3 class="font-extrabold text-sm">Add Custom Exercise</h3>
+        <input type="text" id="customExName" placeholder="Exercise Name (e.g., Cable Lateral Raise)" class="w-full bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl text-xs font-bold outline-none" />
+        <select id="customExMuscle" class="w-full bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl text-xs font-bold outline-none">
+          <option>Chest</option>
+          <option>Back</option>
+          <option>Legs</option>
+          <option>Shoulders</option>
+          <option>Arms</option>
+          <option>Core</option>
+        </select>
+        <div class="flex gap-2">
+          <button onclick="document.getElementById('customExModal').classList.add('hidden')" class="btn-anim flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold">Cancel</button>
+          <button onclick="saveCustomExercise()" class="btn-anim flex-1 py-2.5 rounded-xl bg-emerald text-white text-xs font-extrabold">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Tab Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 dark:bg-[#151C28]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-2 py-2 grid grid-cols-5 gap-1 z-30">
+      <button onclick="switchTab('log')" id="nav-log" class="btn-anim flex flex-col items-center py-1 text-emerald font-extrabold text-[10px]">
+        <i data-lucide="plus-square" class="w-5 h-5 mb-0.5"></i>
+        <span>Log Lift</span>
+      </button>
+      <button onclick="switchTab('reports')" id="nav-reports" class="btn-anim flex flex-col items-center py-1 text-slate-400 font-bold text-[10px]">
+        <i data-lucide="bar-chart-2" class="w-5 h-5 mb-0.5"></i>
+        <span>Reports</span>
+      </button>
+      <button onclick="switchTab('compare')" id="nav-compare" class="btn-anim flex flex-col items-center py-1 text-slate-400 font-bold text-[10px]">
+        <i data-lucide="git-compare" class="w-5 h-5 mb-0.5"></i>
+        <span>Compare</span>
+      </button>
+      <button onclick="switchTab('routines')" id="nav-routines" class="btn-anim flex flex-col items-center py-1 text-slate-400 font-bold text-[10px]">
+        <i data-lucide="dumbbell" class="w-5 h-5 mb-0.5"></i>
+        <span>Routines</span>
+      </button>
+      <button onclick="switchTab('profile')" id="nav-profile" class="btn-anim flex flex-col items-center py-1 text-slate-400 font-bold text-[10px]">
+        <i data-lucide="user" class="w-5 h-5 mb-0.5"></i>
+        <span>Profile</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- APPLICATION LOGIC & OFFLINE DATABASE -->
+  <script>
+    const STORAGE_KEY = 'GYM_BUDDY_MOBILE_DB_V1';
+
+    const SEED_EXERCISES = [
+      { id: 'ex1', name: 'Barbell Bench Press', muscle: 'Chest', equip: 'Barbell' },
+      { id: 'ex2', name: 'Incline Dumbbell Press', muscle: 'Chest', equip: 'Dumbbell' },
+      { id: 'ex3', name: 'Cable Chest Fly', muscle: 'Chest', equip: 'Cable' },
+      { id: 'ex4', name: 'Push-Ups', muscle: 'Chest', equip: 'Bodyweight' },
+      { id: 'ex5', name: 'Conventional Deadlift', muscle: 'Back', equip: 'Barbell' },
+      { id: 'ex6', name: 'Lat Pulldown', muscle: 'Back', equip: 'Cable' },
+      { id: 'ex7', name: 'Bent-Over Barbell Row', muscle: 'Back', equip: 'Barbell' },
+      { id: 'ex8', name: 'Seated Cable Row', muscle: 'Back', equip: 'Cable' },
+      { id: 'ex9', name: 'Barbell Back Squat', muscle: 'Legs', equip: 'Barbell' },
+      { id: 'ex10', name: 'Leg Press', muscle: 'Legs', equip: 'Machine' },
+      { id: 'ex11', name: 'Romanian Deadlift', muscle: 'Legs', equip: 'Barbell' },
+      { id: 'ex12', name: 'Bulgarian Split Squat', muscle: 'Legs', equip: 'Dumbbell' },
+      { id: 'ex13', name: 'Standing Calf Raise', muscle: 'Legs', equip: 'Machine' },
+      { id: 'ex14', name: 'Overhead Shoulder Press', muscle: 'Shoulders', equip: 'Barbell' },
+      { id: 'ex15', name: 'Dumbbell Lateral Raise', muscle: 'Shoulders', equip: 'Dumbbell' },
+      { id: 'ex16', name: 'Face Pulls', muscle: 'Shoulders', equip: 'Cable' },
+      { id: 'ex17', name: 'Barbell Bicep Curl', muscle: 'Arms', equip: 'Barbell' },
+      { id: 'ex18', name: 'Incline Hammer Curl', muscle: 'Arms', equip: 'Dumbbell' },
+      { id: 'ex19', name: 'Tricep Rope Pushdown', muscle: 'Arms', equip: 'Cable' },
+      { id: 'ex20', name: 'Skull Crushers', muscle: 'Arms', equip: 'Barbell' },
+      { id: 'ex21', name: 'Hanging Leg Raise', muscle: 'Core', equip: 'Bodyweight' },
+      { id: 'ex22', name: 'Cable Crunch', muscle: 'Core', equip: 'Cable' }
+    ];
+
+    const SEED_ROUTINES = [
+      {
+        id: 'rt1',
+        name: 'Push Day (Chest / Shoulders / Triceps)',
+        days: 'Mon, Thu',
+        sets: [
+          { exerciseId: 'ex1', setNo: 1, reps: 8, weight: 70, sec: 90 },
+          { exerciseId: 'ex1', setNo: 2, reps: 8, weight: 75, sec: 90 },
+          { exerciseId: 'ex2', setNo: 1, reps: 10, weight: 28, sec: 75 },
+          { exerciseId: 'ex15', setNo: 1, reps: 12, weight: 12, sec: 60 },
+          { exerciseId: 'ex19', setNo: 1, reps: 12, weight: 25, sec: 60 }
+        ]
+      },
+      {
+        id: 'rt2',
+        name: 'Pull Day (Back / Rear Delts / Biceps)',
+        days: 'Tue, Fri',
+        sets: [
+          { exerciseId: 'ex5', setNo: 1, reps: 5, weight: 120, sec: 120 },
+          { exerciseId: 'ex6', setNo: 1, reps: 10, weight: 60, sec: 75 },
+          { exerciseId: 'ex7', setNo: 1, reps: 8, weight: 70, sec: 90 },
+          { exerciseId: 'ex17', setNo: 1, reps: 12, weight: 30, sec: 60 }
+        ]
+      },
+      {
+        id: 'rt3',
+        name: 'Legs & Core Power',
+        days: 'Wed, Sat',
+        sets: [
+          { exerciseId: 'ex9', setNo: 1, reps: 6, weight: 100, sec: 120 },
+          { exerciseId: 'ex10', setNo: 1, reps: 10, weight: 160, sec: 90 },
+          { exerciseId: 'ex11', setNo: 1, reps: 10, weight: 85, sec: 90 },
+          { exerciseId: 'ex21', setNo: 1, reps: 15, weight: 0, sec: 60 }
+        ]
+      }
+    ];
+
+    function generateInitialWorkouts() {
+      const offsets = [12, 9, 6, 4, 2, 1];
+      return offsets.map((daysAgo, idx) => {
+        const d = new Date();
+        d.setDate(d.getDate() - daysAgo);
+        const iso = d.toISOString().split('T')[0];
+        return {
+          id: 'wk_seed_' + idx,
+          date: iso,
+          notes: 'Solid morning session, good pump.',
+          sets: [
+            { id: 's1_' + idx, date: iso, exerciseId: 'ex1', setNo: 1, reps: 8, weight: 65 + idx * 2.5, sec: 90, photo: null },
+            { id: 's2_' + idx, date: iso, exerciseId: 'ex1', setNo: 2, reps: 8, weight: 67.5 + idx * 2.5, sec: 95, photo: null },
+            { id: 's3_' + idx, date: iso, exerciseId: 'ex9', setNo: 1, reps: 6, weight: 90 + idx * 5, sec: 120, photo: null },
+            { id: 's4_' + idx, date: iso, exerciseId: 'ex7', setNo: 1, reps: 10, weight: 60 + idx * 2.5, sec: 80, photo: null }
+          ]
+        };
+      });
+    }
+
+    let db = {
+      profile: { name: 'Neeraj', goal: 'Build Muscle', unit: 'kg', weightKg: 74, goalWeightKg: 78, waterMl: 2000 },
+      exercises: SEED_EXERCISES,
+      routines: SEED_ROUTINES,
+      workouts: generateInitialWorkouts()
+    };
+
+    const savedRaw = localStorage.getItem(STORAGE_KEY);
+    if (savedRaw) {
+      try { db = JSON.parse(savedRaw); } catch (e) {}
+    }
+
+    function persistDb() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    }
+
+    // Active Draft Workout Rows
+    let todayStr = new Date().toISOString().split('T')[0];
+    let draftRows = [
+      { id: 'row_1', date: todayStr, exerciseId: 'ex1', setNo: 1, reps: 8, weight: 75, sec: 90, photo: null }
+    ];
+    let activePhotoRowId = null;
+    let deletedWorkoutBackup = null;
+
+    // Timer state
+    let timerSec = 90;
+    let timerRunning = false;
+    let timerMode = 'REST';
+    let timerInterval = null;
+
+    // Chart instances
+    let weeklyChartInstance = null;
+    let monthlyChartInstance = null;
+    let exerciseChartInstance = null;
+
+    // Unit helpers
+    function displayWt(kg) {
+      return db.profile.unit === 'lb' ? +(kg * 2.20462).toFixed(1) : +kg;
+    }
+    function toKg(val) {
+      return db.profile.unit === 'lb' ? +(val / 2.20462).toFixed(1) : +val;
+    }
+
+    function toggleWeightUnit() {
+      db.profile.unit = db.profile.unit === 'kg' ? 'lb' : 'kg';
+      persistDb();
+      document.getElementById('unitToggleBtn').textContent = db.profile.unit.toUpperCase();
+      document.getElementById('tableWeightHeader').textContent = db.profile.unit.toUpperCase();
+      renderDraftRows();
+      renderReports();
+      renderComparison();
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    // ==================== TIMER FUNCTIONS ====================
+    function formatMMSS(s) {
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      return String(m).padStart(2, '0') + ':' + String(rem).padStart(2, '0');
+    }
+    function updateTimerUI() {
+      document.getElementById('timerDisplay').textContent = formatMMSS(timerSec);
+      document.getElementById('timerPlayBtn').textContent = timerRunning ? 'Pause' : 'Start';
+      document.getElementById('timerModeBtn').textContent = timerMode;
+    }
+    function toggleTimer() {
+      timerRunning = !timerRunning;
+      if (timerRunning) {
+        timerInterval = setInterval(() => {
+          if (timerMode === 'REST') {
+            if (timerSec <= 1) {
+              timerSec = 0;
+              timerRunning = false;
+              clearInterval(timerInterval);
+              if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+            } else {
+              timerSec--;
+            }
+          } else {
+            timerSec++;
+          }
+          updateTimerUI();
+        }, 1000);
+      } else {
+        clearInterval(timerInterval);
+      }
+      updateTimerUI();
+    }
+    function adjustTimer(delta) {
+      timerSec = Math.max(0, timerSec + delta);
+      updateTimerUI();
+    }
+    function resetTimer() {
+      timerRunning = false;
+      clearInterval(timerInterval);
+      timerSec = timerMode === 'REST' ? 90 : 0;
+      updateTimerUI();
+    }
+    function switchTimerMode() {
+      timerRunning = false;
+      clearInterval(timerInterval);
+      timerMode = timerMode === 'REST' ? 'WORK' : 'REST';
+      timerSec = timerMode === 'REST' ? 90 : 0;
+      updateTimerUI();
+    }
+    function syncTimerToLastRow() {
+      if (draftRows.length > 0) {
+        draftRows[draftRows.length - 1].sec = timerSec;
+        renderDraftRows();
+      }
+    }
+
+    // ==================== WORKOUT LOGGING TABLE ====================
+    function onDateChange(val) {
+      todayStr = val;
+      draftRows.forEach(r => r.date = val);
+      renderDraftRows();
+    }
+
+    function renderDraftRows() {
+      const container = document.getElementById('setRowsContainer');
+      container.innerHTML = '';
+
+      draftRows.forEach((row) => {
+        const div = document.createElement('div');
+        div.className = 'bg-white dark:bg-[#151C28] p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-1.5';
+
+        const exOptions = db.exercises.map(ex =>
+          `<option value="${ex.id}" ${ex.id === row.exerciseId ? 'selected' : ''}>${ex.name}</option>`
+        ).join('');
+
+        div.innerHTML = `
+          <div class="grid grid-cols-12 gap-1 items-center">
+            <!-- Date -->
+            <div class="col-span-2 text-[10px] font-bold text-slate-400 pl-1">${row.date.slice(5)}</div>
+
+            <!-- Exercise Dropdown -->
+            <div class="col-span-3">
+              <select onchange="updateDraftRow('${row.id}', 'exerciseId', this.value)" class="w-full bg-slate-100 dark:bg-slate-800 p-1.5 rounded-lg text-[11px] font-extrabold outline-none truncate">
+                ${exOptions}
+              </select>
+            </div>
+
+            <!-- Set Stepper -->
+            <div class="col-span-2 flex items-center justify-center gap-1">
+              <button onclick="stepDraftRow('${row.id}', 'setNo', -1)" class="btn-anim w-5 h-7 rounded bg-slate-200 dark:bg-slate-800 font-black text-xs">-</button>
+              <span class="font-extrabold text-xs">${row.setNo}</span>
+              <button onclick="stepDraftRow('${row.id}', 'setNo', 1)" class="btn-anim w-5 h-7 rounded bg-slate-200 dark:bg-slate-800 font-black text-xs">+</button>
+            </div>
+
+            <!-- Rep Stepper -->
+            <div class="col-span-2 flex items-center justify-center gap-1">
+              <button onclick="stepDraftRow('${row.id}', 'reps', -1)" class="btn-anim w-5 h-7 rounded bg-slate-200 dark:bg-slate-800 font-black text-xs">-</button>
+              <span class="font-extrabold text-xs text-emerald">${row.reps}</span>
+              <button onclick="stepDraftRow('${row.id}', 'reps', 1)" class="btn-anim w-5 h-7 rounded bg-slate-200 dark:bg-slate-800 font-black text-xs">+</button>
+            </div>
+
+            <!-- Weight -->
+            <div class="col-span-1">
+              <input type="number" step="0.5" value="${displayWt(row.weight)}" onchange="updateDraftRow('${row.id}', 'weight', toKg(this.value))" class="w-full bg-slate-100 dark:bg-slate-800 py-1.5 rounded-lg text-center font-extrabold text-[11px] outline-none" />
+            </div>
+
+            <!-- Time (Sec) -->
+            <div class="col-span-1">
+              <input type="number" value="${row.sec}" onchange="updateDraftRow('${row.id}', 'sec', +this.value)" class="w-full bg-slate-100 dark:bg-slate-800 py-1.5 rounded-lg text-center font-bold text-[10px] text-slate-400 outline-none" />
+            </div>
+
+            <!-- Right-Side '+' Photo Button -->
+            <div class="col-span-1 flex justify-end">
+              <button onclick="openPhotoModal('${row.id}')" class="btn-anim pulse-plus w-9 h-9 rounded-xl ${row.photo ? 'p-0 overflow-hidden ring-2 ring-emerald' : 'bg-emerald/15 text-emerald'} flex items-center justify-center font-black text-base">
+                ${row.photo ? `<img src="${row.photo}" class="w-full h-full object-cover" />` : '+'}
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-1 border-t border-slate-100 dark:border-slate-800/60 px-1">
+            <span class="text-[10px] text-slate-400 font-semibold">Vol: ${Math.round(displayWt(row.weight) * row.reps)} ${db.profile.unit}</span>
+            <button onclick="removeDraftRow('${row.id}')" class="text-[10px] text-red-400 font-bold">Remove Set</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+
+      // Update live summary
+      const totalVolKg = draftRows.reduce((sum, r) => sum + (r.weight * r.reps), 0);
+      document.getElementById('liveSetCount').textContent = `Total Sets: ${draftRows.length}`;
+      document.getElementById('liveVolumeCount').textContent = `Session Volume: ${Math.round(displayWt(totalVolKg)).toLocaleString()} ${db.profile.unit}`;
+    }
+
+    function updateDraftRow(rowId, field, value) {
+      const target = draftRows.find(r => r.id === rowId);
+      if (target) target[field] = value;
+      renderDraftRows();
+    }
+
+    function stepDraftRow(rowId, field, delta) {
+      const target = draftRows.find(r => r.id === rowId);
+      if (target) {
+        target[field] = Math.max(1, target[field] + delta);
+        renderDraftRows();
+      }
+    }
+
+    function removeDraftRow(rowId) {
+      if (draftRows.length <= 1) return alert('At least 1 set is required.');
+      draftRows = draftRows.filter(r => r.id !== rowId);
+      renderDraftRows();
+    }
+
+    function duplicatePreviousSet() {
+      const last = draftRows[draftRows.length - 1];
+      draftRows.push({
+        ...last,
+        id: 'row_' + Date.now() + Math.random(),
+        setNo: last.setNo + 1,
+        photo: null
+      });
+      renderDraftRows();
+    }
+
+    // ==================== PHOTO ATTACHMENT MODAL ====================
+    function openPhotoModal(rowId) {
+      activePhotoRowId = rowId;
+      const row = draftRows.find(r => r.id === rowId);
+      const preview = document.getElementById('modalPhotoPreview');
+      const delBtn = document.getElementById('deletePhotoBtn');
+      if (row && row.photo) {
+        preview.src = row.photo;
+        preview.classList.remove('hidden');
+        delBtn.classList.remove('hidden');
+      } else {
+        preview.classList.add('hidden');
+        delBtn.classList.add('hidden');
+      }
+      document.getElementById('photoModal').classList.remove('hidden');
+    }
+
+    function closePhotoModal() {
+      document.getElementById('photoModal').classList.add('hidden');
+    }
+
+    function handlePhotoSelected(event) {
+      const file = event.target.files[0];
+      if (!file || !activePhotoRowId) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const row = draftRows.find(r => r.id === activePhotoRowId);
+        if (row) row.photo = e.target.result;
+        renderDraftRows();
+        closePhotoModal();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function deleteRowPhoto() {
+      const row = draftRows.find(r => r.id === activePhotoRowId);
+      if (row) row.photo = null;
+      renderDraftRows();
+      closePhotoModal();
+    }
+
+    // ==================== SAVE WORKOUT + CONFETTI PR DETECTION ====================
+    function saveCurrentWorkout() {
+      // Check if any exercise hit a new PR
+      let hitNewPR = false;
+      draftRows.forEach(r => {
+        const pastMax = db.workouts.flatMap(w => w.sets).filter(s => s.exerciseId === r.exerciseId).reduce((m, s) => Math.max(m, s.weight), 0);
+        if (pastMax > 0 && r.weight > pastMax) hitNewPR = true;
+      });
+
+      const newWorkout = {
+        id: 'wk_' + Date.now(),
+        date: todayStr,
+        notes: document.getElementById('workoutNotesInput').value || 'Logged Session',
+        sets: draftRows.map(r => ({ ...r }))
+      };
+
+      db.workouts.unshift(newWorkout);
+      persistDb();
+
+      if (typeof confetti === 'function') {
+        confetti({ particleCount: hitNewPR ? 120 : 55, spread: 75, origin: { y: 0.6 } });
+      }
+
+      alert(hitNewPR ? '🏆 NEW PERSONAL RECORD! Workout saved!' : '✅ Workout saved to your phone!');
+      switchTab('reports');
+    }
+
+    // ==================== CUSTOM EXERCISE ====================
+    function openCustomExerciseModal() {
+      document.getElementById('customExModal').classList.remove('hidden');
+    }
+    function saveCustomExercise() {
+      const name = document.getElementById('customExName').value.trim();
+      const muscle = document.getElementById('customExMuscle').value;
+      if (!name) return;
+      const newEx = { id: 'ex_c_' + Date.now(), name, muscle, equip: 'Custom' };
+      db.exercises.push(newEx);
+      persistDb();
+      draftRows[draftRows.length - 1].exerciseId = newEx.id;
+      document.getElementById('customExName').value = '';
+      document.getElementById('customExModal').classList.add('hidden');
+      populateSelectDropdowns();
+      renderDraftRows();
+    }
+
+    // ==================== REPORTS & CHARTS ====================
+    function switchReportSubTab(sub) {
+      ['weekly', 'monthly', 'progress', 'exercise'].forEach(k => {
+        document.getElementById('report-' + k).classList.toggle('hidden', k !== sub);
+        const btn = document.getElementById('subtab-' + k);
+        btn.className = k === sub ? 'btn-anim py-2 rounded-lg bg-emerald text-white' : 'btn-anim py-2 rounded-lg text-slate-400';
+      });
+      renderReports();
+    }
+
+    function renderReports() {
+      const unit = db.profile.unit;
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const recent = db.workouts.filter(w => new Date(w.date) >= sevenDaysAgo);
+      let setsCount = 0, repsCount = 0, volKg = 0;
+      const muscleCounts = {};
+      const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const dayVolumes = [0, 0, 0, 0, 0, 0, 0];
+
+      recent.forEach(w => {
+        const dIdx = (new Date(w.date).getDay() + 6) % 7;
+        w.sets.forEach(s => {
+          setsCount++;
+          repsCount += s.reps;
+          volKg += (s.reps * s.weight);
+          dayVolumes[dIdx] += displayWt(s.reps * s.weight);
+          const exObj = db.exercises.find(e => e.id === s.exerciseId);
+          const m = exObj ? exObj.muscle : 'Chest';
+          muscleCounts[m] = (muscleCounts[m] || 0) + 1;
+        });
+      });
+
+      const topMuscle = Object.entries(muscleCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || 'Chest';
+      document.getElementById('wkWorkoutsVal').textContent = recent.length;
+      document.getElementById('wkVolumeVal').textContent = `${Math.round(displayWt(volKg)).toLocaleString()} ${unit}`;
+      document.getElementById('wkSetsRepsVal').textContent = `${setsCount} / ${repsCount}`;
+      document.getElementById('wkTopMuscleVal').textContent = topMuscle;
+
+      // Weekly Bar Chart
+      const ctxBar = document.getElementById('weeklyBarChart').getContext('2d');
+      if (weeklyChartInstance) weeklyChartInstance.destroy();
+      weeklyChartInstance = new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+          labels: dayLabels,
+          datasets: [{ label: `Volume (${unit})`, data: dayVolumes, backgroundColor: '#10B981', borderRadius: 6 }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+
+      // Workout History List + Delete with Undo
+      const q = (document.getElementById('historySearch')?.value || '').toLowerCase();
+      const histContainer = document.getElementById('workoutHistoryList');
+      histContainer.innerHTML = '';
+      db.workouts.slice(0, 8).forEach(w => {
+        const names = w.sets.map(s => db.exercises.find(e => e.id === s.exerciseId)?.name || '').join(', ');
+        if (q && !names.toLowerCase().includes(q)) return;
+        const row = document.createElement('div');
+        row.className = 'p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-between text-xs';
+        row.innerHTML = `
+          <div>
+            <p class="font-extrabold">${w.date} • ${w.sets.length} sets</p>
+            <p class="text-[11px] text-slate-400 truncate max-w-[230px]">${names}</p>
+          </div>
+          <button onclick="deleteWorkout('${w.id}')" class="btn-anim px-2.5 py-1 rounded-lg bg-red-500/15 text-red-400 font-bold text-[11px]">Delete</button>
+        `;
+        histContainer.appendChild(row);
+      });
+
+      // Monthly Heatmap
+      const heatContainer = document.getElementById('calendarHeatmap');
+      heatContainer.innerHTML = '';
+      let activeDays = 0;
+      for (let i = 27; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const iso = d.toISOString().split('T')[0];
+        const hasWk = db.workouts.some(w => w.date === iso);
+        if (hasWk) activeDays++;
+        const cell = document.createElement('div');
+        cell.className = `h-9 rounded-lg flex items-center justify-center text-[11px] font-extrabold ${hasWk ? 'bg-emerald text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`;
+        cell.textContent = iso.slice(8);
+        heatContainer.appendChild(cell);
+      }
+      document.getElementById('moActiveDays').textContent = activeDays;
+      document.getElementById('moBestWeek').textContent = `${Math.round(displayWt(volKg)).toLocaleString()} ${unit}`;
+
+      // Monthly Line Chart
+      const ctxMo = document.getElementById('monthlyLineChart').getContext('2d');
+      if (monthlyChartInstance) monthlyChartInstance.destroy();
+      monthlyChartInstance = new Chart(ctxMo, {
+        type: 'line',
+        data: {
+          labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+          datasets: [{ label: 'Volume', data: [4200, 4950, 5300, Math.max(5600, Math.round(displayWt(volKg)))], borderColor: '#6366F1', tension: 0.35 }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      renderExerciseRecords();
+    }
+
+    function renderExerciseRecords() {
+      const exId = document.getElementById('recordExerciseSelect').value || 'ex1';
+      const sets = db.workouts.flatMap(w => w.sets).filter(s => s.exerciseId === exId);
+      const maxW = sets.reduce((m, s) => Math.max(m, s.weight), 0);
+      const maxR = sets.reduce((m, s) => Math.max(m, s.reps), 0);
+      const maxV = sets.reduce((m, s) => Math.max(m, s.weight * s.reps), 0);
+
+      document.getElementById('prMaxWeight').textContent = `${displayWt(maxW)} ${db.profile.unit}`;
+      document.getElementById('prMaxReps').textContent = maxR;
+      document.getElementById('prMaxVol').textContent = `${Math.round(displayWt(maxV))} ${db.profile.unit}`;
+
+      const ctxEx = document.getElementById('exerciseLineChart').getContext('2d');
+      if (exerciseChartInstance) exerciseChartInstance.destroy();
+      exerciseChartInstance = new Chart(ctxEx, {
+        type: 'line',
+        data: {
+          labels: sets.slice().reverse().map(s => s.date.slice(5)),
+          datasets: [{ label: 'Weight', data: sets.slice().reverse().map(s => displayWt(s.weight)), borderColor: '#10B981', tension: 0.3 }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+    }
+
+    function deleteWorkout(id) {
+      deletedWorkoutBackup = db.workouts.find(w => w.id === id);
+      db.workouts = db.workouts.filter(w => w.id !== id);
+      persistDb();
+      renderReports();
+      const sb = document.getElementById('undoSnackbar');
+      sb.classList.remove('hidden');
+      setTimeout(() => sb.classList.add('hidden'), 5000);
+    }
+
+    function undoDelete() {
+      if (deletedWorkoutBackup) {
+        db.workouts.unshift(deletedWorkoutBackup);
+        deletedWorkoutBackup = null;
+        persistDb();
+        renderReports();
+      }
+      document.getElementById('undoSnackbar').classList.add('hidden');
+    }
+
+    // ==================== PREVIOUS VS CURRENT COMPARISON ====================
+    function renderComparison() {
+      const exId = document.getElementById('compareExerciseSelect').value || 'ex1';
+      const sessions = db.workouts
+        .map(w => ({ date: w.date, sets: w.sets.filter(s => s.exerciseId === exId) }))
+        .filter(s => s.sets.length > 0);
+
+      const curr = sessions[0] || { date: 'Today', sets: [] };
+      const prev = sessions[1] || { date: 'Prev', sets: [] };
+
+      const sum = (arr) => ({
+        wt: arr.reduce((m, s) => Math.max(m, s.weight), 0),
+        reps: arr.reduce((a, s) => a + s.reps, 0),
+        vol: arr.reduce((a, s) => a + s.weight * s.reps, 0),
+        sec: arr.reduce((a, s) => a + (s.sec || 60), 0)
+      });
+
+      const c = sum(curr.sets);
+      const p = sum(prev.sets);
+      const pct = (now, old) => old === 0 ? 100 : +(((now - old) / old) * 100).toFixed(1);
+
+      document.getElementById('prComparisonBanner').classList.toggle('hidden', !(c.wt > p.wt && p.wt > 0));
+
+      const metrics = [
+        { label: `Max Weight (${db.profile.unit})`, prev: displayWt(p.wt), curr: displayWt(c.wt), delta: pct(c.wt, p.wt) },
+        { label: 'Total Reps', prev: p.reps, curr: c.reps, delta: pct(c.reps, p.reps) },
+        { label: `Total Volume (${db.profile.unit})`, prev: Math.round(displayWt(p.vol)), curr: Math.round(displayWt(c.vol)), delta: pct(c.vol, p.vol) },
+        { label: 'Workout Time (sec)', prev: p.sec, curr: c.sec, delta: pct(c.sec, p.sec) }
+      ];
+
+      const container = document.getElementById('comparisonCardsContainer');
+      container.innerHTML = metrics.map(m => {
+        const up = m.delta >= 0;
+        return `
+          <div class="bg-white dark:bg-[#151C28] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-extrabold">${m.label}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-black ${up ? 'bg-emerald/15 text-emerald' : 'bg-red-500/15 text-red-400'}">
+                ${up ? '▲ +' : '▼ '}${m.delta}%
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-center">
+              <div class="bg-slate-100 dark:bg-slate-800 p-2 rounded-xl">
+                <p class="text-[10px] text-slate-400 font-bold">PREVIOUS (${prev.date})</p>
+                <p class="text-lg font-black text-slate-400">${m.prev}</p>
+              </div>
+              <div class="bg-emerald/10 p-2 rounded-xl">
+                <p class="text-[10px] text-emerald font-bold">CURRENT (${curr.date})</p>
+                <p class="text-lg font-black text-emerald">${m.curr}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==================== ROUTINES & LIBRARY ====================
+    function renderRoutinesAndLibrary() {
+      const rCont = document.getElementById('routinesListContainer');
+      rCont.innerHTML = db.routines.map(rt => `
+        <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-between">
+          <div>
+            <p class="font-extrabold text-xs">${rt.name}</p>
+            <p class="text-[10px] text-emerald font-bold">Days: ${rt.days} • ${rt.sets.length} sets</p>
+          </div>
+          <button onclick="loadRoutine('${rt.id}')" class="btn-anim px-3 py-1.5 rounded-lg bg-emerald text-white font-extrabold text-xs">Load</button>
+        </div>
+      `).join('');
+      renderLibrary();
+    }
+
+    function loadRoutine(rtId) {
+      const rt = db.routines.find(r => r.id === rtId);
+      if (!rt) return;
+      draftRows = rt.sets.map((s, idx) => ({
+        id: 'row_rt_' + idx + '_' + Date.now(),
+        date: todayStr,
+        exerciseId: s.exerciseId,
+        setNo: s.setNo,
+        reps: s.reps,
+        weight: s.weight,
+        sec: s.sec,
+        photo: null
+      }));
+      renderDraftRows();
+      switchTab('log');
+    }
+
+    function renderLibrary() {
+      const q = (document.getElementById('librarySearchInput')?.value || '').toLowerCase();
+      const lCont = document.getElementById('libraryListContainer');
+      lCont.innerHTML = db.exercises
+        .filter(e => e.name.toLowerCase().includes(q) || e.muscle.toLowerCase().includes(q))
+        .map(e => `
+          <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 flex justify-between items-center text-xs">
+            <div>
+              <p class="font-extrabold">${e.name}</p>
+              <p class="text-[10px] text-slate-400 font-bold">${e.muscle} • ${e.equip}</p>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-emerald/15 text-emerald text-[10px] font-bold">${e.muscle}</span>
+          </div>
+        `).join('');
+    }
+
+    // ==================== PROFILE, WATER & CSV EXPORT ====================
+    function saveBodyWeightCheckin() {
+      const val = parseFloat(document.getElementById('newBodyWeightInput').value);
+      if (!val) return;
+      db.profile.weightKg = val;
+      persistDb();
+      document.getElementById('bodyGoalSubtitle').textContent = `Current: ${val} kg → Target: ${db.profile.goalWeightKg} kg`;
+      alert('Body weight updated!');
+    }
+
+    function addWater(ml) {
+      db.profile.waterMl = (db.profile.waterMl || 2000) + ml;
+      persistDb();
+      document.getElementById('waterReadout').textContent = `${db.profile.waterMl.toLocaleString()} / 3,000 ml`;
+    }
+
+    function saveProfileSettings() {
+      db.profile.name = document.getElementById('profName').value || 'Athlete';
+      db.profile.goal = document.getElementById('profGoal').value;
+      persistDb();
+      alert('Profile saved!');
+    }
+
+    function exportCSV() {
+      let csv = 'Date,Exercise,Set,Reps,Weight_KG,Duration_Sec\n';
+      db.workouts.forEach(w => {
+        w.sets.forEach(s => {
+          const exName = db.exercises.find(e => e.id === s.exerciseId)?.name || 'Exercise';
+          csv += `${w.date},"${exName}",${s.setNo},${s.reps},${s.weight},${s.sec}\n`;
+        });
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gym_buddy_workouts.csv';
+      a.click();
+    }
+
+    // ==================== NAVIGATION ====================
+    function switchTab(tab) {
+      ['log', 'reports', 'compare', 'routines', 'profile'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+        const navBtn = document.getElementById('nav-' + t);
+        navBtn.className = t === tab
+          ? 'btn-anim flex flex-col items-center py-1 text-emerald font-extrabold text-[10px]'
+          : 'btn-anim flex flex-col items-center py-1 text-slate-400 font-bold text-[10px]';
+      });
+      if (tab === 'reports') renderReports();
+      if (tab === 'compare') renderComparison();
+      if (tab === 'routines') renderRoutinesAndLibrary();
+    }
+
+    function populateSelectDropdowns() {
+      const opts = db.exercises.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+      document.getElementById('recordExerciseSelect').innerHTML = opts;
+      document.getElementById('compareExerciseSelect').innerHTML = opts;
+    }
+
+    // BOOT APP ON LOAD
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      document.getElementById('workoutDateInput').value = todayStr;
+      document.getElementById('profName').value = db.profile.name;
+      populateSelectDropdowns();
+      renderDraftRows();
+    });
+  </script>
+</body>
+</html>
